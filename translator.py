@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from openpyxl import load_workbook
+from openpyxl.styles import Alignment
 from pypdf import PdfReader
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
@@ -135,7 +136,19 @@ PHRASES = {
     "接油盒": "Oil Collector",
     "支撑件组合件": "Support Assembly",
     "限速器": "Overspeed Governor",
+    "主机支架梁": "Machine Support Beam",
     "主机支撑梁": "Machine Support Beam",
+    "轿厢支撑梁": "Car Support Beam",
+    "对重支撑梁": "Counterweight Support Beam",
+    "轿架下梁": "Car Sling Lower Beam",
+    "轿厢导轨长支架": "Car Guide Rail Long Bracket",
+    "轿厢导轨短支架": "Car Guide Rail Short Bracket",
+    "对重导轨长支架": "Counterweight Guide Rail Long Bracket",
+    "对重导轨短支架": "Counterweight Guide Rail Short Bracket",
+    "导轨长支架": "Guide Rail Long Bracket",
+    "导轨短支架": "Guide Rail Short Bracket",
+    "长支架": "Long Bracket",
+    "短支架": "Short Bracket",
     "导轨连接支架": "Guide Rail Connecting Bracket",
     "轿厢导轨支架": "Car Guide Rail Bracket",
     "轿厢导轨支架底码": "Car Guide Rail Bracket Base",
@@ -328,6 +341,10 @@ def translate_excel(input_path: Path, output_path: Path) -> None:
         for cell in row:
             if isinstance(cell.value, str) and not cell.value.startswith("="):
                 cell.value = translate(cell.value)
+                cell.alignment = cell.alignment.copy(wrap_text=True, shrink_to_fit=True)
+    for column, width in {"C": 24, "D": 24, "H": 28, "I": 18}.items():
+        if sheet.column_dimensions[column].width is None or sheet.column_dimensions[column].width < width:
+            sheet.column_dimensions[column].width = width
     workbook.save(output_path)
 
 
