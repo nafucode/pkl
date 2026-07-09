@@ -60,6 +60,7 @@ def convert():
         with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zipped:
             zipped.write(result.pdf_path, f"{code}-English.pdf")
             zipped.write(result.excel_path, f"{code}-English.xlsx")
+            zipped.write(result.report_path, f"{code}-translation-check-report.txt")
         archive.seek(0)
 
     response = send_file(
@@ -70,6 +71,7 @@ def convert():
     )
     response.headers["X-Package-Count"] = str(result.package_count)
     response.headers["X-Page-Count"] = str(result.page_count)
+    response.headers["X-Residual-Chinese-Count"] = str(result.residual_chinese_count)
     return response
 
 

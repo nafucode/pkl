@@ -39,6 +39,7 @@
           <span>保留 Excel 内嵌 Logo</span>
           <span>按箱号分页</span>
           <span>电梯行业术语翻译</span>
+          <span>自动检查中文残留</span>
           <span>生成 zip 下载包</span>
         </div>
       </section>
@@ -90,7 +91,11 @@
 
           const packageCount = response.headers.get("X-Package-Count");
           const pageCount = response.headers.get("X-Page-Count");
-          resultMeta.textContent = `已生成 ${packageCount || "-"} 个箱号明细，PDF 共 ${pageCount || "-"} 页。`;
+          const residualCount = Number(response.headers.get("X-Residual-Chinese-Count") || "0");
+          const checkText = residualCount > 0
+            ? `发现 ${residualCount} 处中文残留，请查看下载包内的检查报告。`
+            : "中文残留检查通过。";
+          resultMeta.textContent = `已生成 ${packageCount || "-"} 个箱号明细，PDF 共 ${pageCount || "-"} 页。${checkText}`;
           resultBox.hidden = false;
 
           const clicker = document.createElement("a");

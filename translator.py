@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from openpyxl import load_workbook
+from pypdf import PdfReader
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.pagesizes import A4
@@ -23,8 +24,20 @@ class ConversionError(Exception):
 class ConversionResult:
     excel_path: Path
     pdf_path: Path
+    report_path: Path
     package_count: int
     page_count: int
+    residual_chinese_count: int
+
+
+CHINESE_RE = re.compile(r"[\u4e00-\u9fff]+")
+
+
+@dataclass
+class ResidualChineseFinding:
+    source: str
+    location: str
+    text: str
 
 
 PHRASES = {
@@ -229,6 +242,15 @@ def clean_text(value: Any) -> str:
     return str(value).strip()
 
 
+def has_chinese(value: Any) -> bool:
+    return bool(CHINESE_RE.search(clean_text(value)))
+
+
+def compact_text(value: Any, limit: int = 120) -> str:
+    text = re.sub(r"\s+", " ", clean_text(value))
+    return text if len(text) <= limit else f"{text[:limit - 3]}..."
+
+
 def translate(value: Any) -> str:
     source = clean_text(value)
     if not source:
@@ -307,6 +329,109 @@ def translate_excel(input_path: Path, output_path: Path) -> None:
             if isinstance(cell.value, str) and not cell.value.startswith("="):
                 cell.value = translate(cell.value)
     workbook.save(output_path)
+
+
+def scan_excel_for_residual_chinese(path: Path) -> list[ResidualChineseFinding]:
+    findings: list[ResidualChineseFinding] = []
+    workbook = load_workbook(path, data_only=False, read_only=True)
+    sheet = find_packing_sheet(workbook)
+    for row in sheet.iter_rows():
+        for cell in row:
+            if isinstance(cell.value, str) and has_chinese(cell.value):
+                findings.append(
+                    ResidualChineseFinding(
+                        source="Excel",
+                        location=f"{sheet.title}!{cell.coordinate}",
+                        text=compact_text(cell.value),
+                    )
+                )
+    workbook.close()
+    return findings
+
+
+def scan_pdf_for_residual_chinese(path: Path) -> list[ResidualChineseFinding]:
+    findings: list[ResidualChineseFinding] = []
+    reader = PdfReader(path)
+    for index, page in enumerate(reader.pages, start=1):
+        text = page.extract_text() or ""
+        for match in CHINESE_RE.finditer(text):
+            start = max(match.start() - 35, 0)
+            end = min(match.end() + 35, len(text))
+            findings.append(
+                ResidualChineseFinding(
+                    source="PDF",
+                    location=f"page {index}",
+                    text=compact_text(text[start:end]),
+                )
+            )
+    return findings
+
+
+def scan_pdf_source_for_residual_chinese(input_path: Path) -> list[ResidualChineseFinding]:
+    findings: list[ResidualChineseFinding] = []
+    workbook = load_workbook(input_path, data_only=True, read_only=True)
+    sheet = find_packing_sheet(workbook)
+    starts = find_detail_starts(sheet)
+    for index, start in enumerate(starts):
+        next_start = starts[index + 1] if index + 1 < len(starts) else None
+        meta_cells = {
+            f"B{start + 1}": sheet.cell(start + 1, 2).value,
+            f"G{start + 1}": sheet.cell(start + 1, 7).value,
+            f"G{start + 2}": sheet.cell(start + 2, 7).value,
+            f"I{start + 2}": sheet.cell(start + 2, 9).value,
+            f"B{start + 3}": sheet.cell(start + 3, 2).value,
+            f"G{start + 3}": sheet.cell(start + 3, 7).value,
+        }
+        for coordinate, value in meta_cells.items():
+            translated = translate(value)
+            if has_chinese(translated):
+                findings.append(
+                    ResidualChineseFinding(
+                        source="PDF source",
+                        location=f"{sheet.title}!{coordinate}",
+                        text=compact_text(translated),
+                    )
+                )
+
+        end = (next_start - 1) if next_start else sheet.max_row
+        for row in range(start + 5, min(end, start + 36) + 1):
+            for column in [1, 2, 3, 4, 6, 7, 8]:
+                value = sheet.cell(row, column).value
+                if not clean_text(value):
+                    continue
+                translated = translate(value)
+                if has_chinese(translated):
+                    findings.append(
+                        ResidualChineseFinding(
+                            source="PDF source",
+                            location=f"{sheet.title}!{sheet.cell(row, column).coordinate}",
+                            text=compact_text(translated),
+                        )
+                    )
+    workbook.close()
+    return findings
+
+
+def write_translation_report(path: Path, findings: list[ResidualChineseFinding]) -> None:
+    lines = [
+        "Translation residual Chinese check",
+        "==================================",
+        "",
+    ]
+    if not findings:
+        lines.extend([
+            "PASS: No Chinese text was found in the generated PDF, the PDF source data, or the translated packing list sheet.",
+            "",
+        ])
+    else:
+        lines.extend([
+            f"WARNING: {len(findings)} Chinese text fragment(s) were found after translation.",
+            "Please add the missing elevator terms to the dictionary and regenerate the files.",
+            "",
+        ])
+        for index, finding in enumerate(findings, start=1):
+            lines.append(f"{index}. [{finding.source}] {finding.location}: {finding.text}")
+    path.write_text("\n".join(lines), encoding="utf-8")
 
 
 def package_meta(sheet, start: int) -> dict[str, Any]:
@@ -470,10 +595,15 @@ def convert_workbook(input_path: Path, output_dir: Path) -> ConversionResult:
     output_dir.mkdir(parents=True, exist_ok=True)
     excel_path = output_dir / "packing-list-English.xlsx"
     pdf_path = output_dir / "packing-list-English.pdf"
+    report_path = output_dir / "translation-check-report.txt"
 
     try:
         translate_excel(input_path, excel_path)
         package_count = build_pdf(input_path, pdf_path)
+        findings = scan_excel_for_residual_chinese(excel_path)
+        findings.extend(scan_pdf_source_for_residual_chinese(input_path))
+        findings.extend(scan_pdf_for_residual_chinese(pdf_path))
+        write_translation_report(report_path, findings)
     except Exception as exc:
         if isinstance(exc, ConversionError):
             raise
@@ -482,6 +612,8 @@ def convert_workbook(input_path: Path, output_dir: Path) -> ConversionResult:
     return ConversionResult(
         excel_path=excel_path,
         pdf_path=pdf_path,
+        report_path=report_path,
         package_count=package_count,
         page_count=package_count + 1,
+        residual_chinese_count=len(findings),
     )
