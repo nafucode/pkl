@@ -109,6 +109,7 @@ PHRASES = {
     "小D套": "Narrow Door Jamb",
     "门套连接件": "Door Jamb Connector",
     "D套连接件": "Door Jamb Connector",
+    "玻璃": "Glass",
     "轿厢拼装螺栓": "Car Assembly Bolts",
     "外六角螺栓": "Hex Head Bolts",
     "轿门": "Car Door",
