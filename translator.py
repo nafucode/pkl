@@ -132,6 +132,8 @@ PHRASES = {
     "对重架组件": "Counterweight Frame Assembly",
     "对重导向轮": "Counterweight Deflector Sheave",
     "对重导靴": "Counterweight Guide Shoe",
+    "钢带轮": "Steel Belt Sheave",
+    "对称件": "Symmetrical Part",
     "轿架上梁": "Car Sling Upper Beam",
     "轿厢反绳轮梁": "Car Diverting Sheave Beam",
     "轿厢返绳轮": "Car Diverting Sheave",
@@ -210,31 +212,37 @@ REPLACEMENTS = [
     ("含小支架", "with small bracket"),
     ("具体见内部明细", "see internal detailed list"),
     ("含提拉机构、导靴板", "with lifting mechanism and guide shoe plate"),
-    ("组装发货（含防护罩）", "shipped assembled (with protective cover)"),
-    ("与轮梁组装发货", "shipped assembled with sheave beam"),
-    ("组装发货", "shipped assembled"),
+    ("组装发货（含防护罩）", "Shipped Pre-assembled (with protective cover)"),
+    ("与轮梁组装发货", "Shipped Pre-assembled with sheave beam"),
+    ("组装发货", "Shipped Pre-assembled"),
     ("方形", "square type"),
     ("L型", "L type"),
     ("C型", "C type"),
     ("含压导板，连接螺栓", "with rail clips and connecting bolts"),
     ("连接限位开关", "connected to limit switch "),
     ("按楼层站配", "supplied per floor/stop"),
-    ("绳头棒端头", "rope rod end"),
+    ("焊接件", "Weldment "),
+    ("绳头棒端头", "Rod End"),
+    ("Rope Rod端头", "Rod End"),
     ("有簧", "with spring"),
     ("夹30绳,3槽", "for 30 rope, 3 grooves"),
     ("柴机油", "diesel engine oil"),
     ("颜色：", "color: "),
     ("含底座", "with base"),
-    ("带紧固件", "with fasteners"),
+    ("带紧固件", "With Fasteners"),
+    ("带Fasteners", "With Fasteners"),
     ("含地板及减震胶垫", "with floor and vibration damping rubber pads"),
     ("含地坎托架及护脚板", "with sill bracket and toe guard"),
     ("含灯具", "with light fixtures"),
-    ("与直梁装配好", "assembled with upright beam"),
-    ("含弹簧及紧固件", "with springs and fasteners"),
+    ("与直梁装配好", "Pre-assembled with the Upright Beam"),
+    ("与Upright Beam装配好", "Pre-assembled with the Upright Beam"),
+    ("含弹簧及紧固件", "Including Spring(s) and Fasteners"),
+    ("含弹簧及Fasteners", "Including Spring(s) and Fasteners"),
     ("含防尘罩，油杯座", "with dust cover and oil cup seat"),
-    ("与对重架组装发货", "shipped assembled with counterweight frame"),
+    ("与对重架组装发货", "Shipped Pre-assembled with counterweight frame"),
     ("直径", "diameter "),
-    ("导轨顶面宽", "guide rail top width"),
+    ("导轨顶面宽", "Guide Rail Head Width"),
+    ("Guide Rail顶面宽", "Guide Rail Head Width"),
     ("一段有连接机器底座孔", "one section has holes for machine base connection"),
     ("米/根", "m/pc"),
 ]
@@ -246,7 +254,7 @@ UNITS = {
     "套": "set",
     "组": "set",
     "条": "pcs",
-    "块": "blocks",
+    "块": "PCS",
     "包": "pack",
     "米": "m",
     "壶": "can",
@@ -286,6 +294,10 @@ def translate(value: Any) -> str:
     for chinese, english in REPLACEMENTS:
         result = result.replace(chinese, english)
     result = re.sub(r"(\d+)层(\d+)站(\d+)门", r"\1F/\2S/\3D", result)
+    result = re.sub(r"(\d+(?:\.\d+)?)\s*kg/块", r"\1 kg/PCS", result, flags=re.IGNORECASE)
+    result = re.sub(r"P\+Q\s*=\s*(\d+(?:\.\d+)?)\s*kg", r"P+Q = \1 kg", result, flags=re.IGNORECASE)
+    result = re.sub(r"V\s*=\s*(\d+(?:\.\d+)?)\s*m/s", r"V = \1 m/s", result, flags=re.IGNORECASE)
+    result = re.sub(r"Guide Rail Head Width\s*=\s*(\d+(?:\.\d+)?)", r"Guide Rail Head Width = \1 mm", result)
     result = result.replace("层", "F").replace("站", "S").replace("门", "D")
     result = result.replace("，", ", ").replace("：", ": ").replace("φ", "dia. ")
     return re.sub(r"\s+", " ", result).strip()
