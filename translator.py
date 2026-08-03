@@ -48,6 +48,12 @@ class ResidualChineseFinding:
     text: str
 
 
+@dataclass
+class QualityFinding:
+    location: str
+    text: str
+
+
 PHRASES = {
     "装     箱     清     单": "PACKING LIST",
     "装箱清单": "PACKING LIST",
@@ -84,8 +90,8 @@ PHRASES = {
     "物流": "Logistics",
     "日期": "Date",
     "木箱": "Wooden Case",
-    "软包": "Soft Packing",
-    "裸包": "Bare Packing",
+    "软包": "Soft Package",
+    "裸包": "Bare Package",
     "曳引机箱": "Traction Machine Case",
     "曳引机": "Traction Machine",
     "编码器线": "Encoder Cable",
@@ -119,6 +125,8 @@ PHRASES = {
     "前壁": "Front Wall Panel",
     "前壁板": "Front Wall Panel",
     "侧中壁": "Side Center Wall Panel",
+    "后侧壁": "Rear Side Wall Panel",
+    "后中壁": "Rear Center Wall Panel",
     "侧壁": "Side Wall Panel",
     "立柱": "Upright Post",
     "门头": "Door Header",
@@ -167,6 +175,8 @@ PHRASES = {
     "光幕": "Light Curtain",
     "对重架组件": "Counterweight Frame Assembly",
     "对重导向轮": "Counterweight Deflector Sheave",
+    "轿厢反绳轮": "Car Deflector Sheave",
+    "轿厢Deflector Sheave": "Car Deflector Sheave",
     "对重导靴": "Counterweight Guide Shoe",
     "钢带轮": "Belt Sheave",
     "对称件": "Symmetrical Part",
@@ -178,6 +188,7 @@ PHRASES = {
     "轿厢返绳轮": "Car Diverting Sheave",
     "轿厢上梁导靴": "Car Upper Beam Guide Shoe",
     "托架导靴": "Bracket Guide Shoe",
+    "支架导靴": "Bracket Guide Shoe",
     "轿厢油杯": "Car Oil Cup",
     "对重油杯": "Counterweight Oil Cup",
     "小方油杯": "Small Square Oil Cup",
@@ -190,6 +201,7 @@ PHRASES = {
     "轿厢支撑梁": "Car Support Beam",
     "对重侧支撑梁": "Counterweight Side Support Beam",
     "对重支撑梁": "Counterweight Support Beam",
+    "侧梁": "Side Beam",
     "轿架下梁": "Car Bottom Beam",
     "轿厢导轨长支架": "Car Guide Rail Long Bracket",
     "轿厢导轨短支架": "Car Guide Rail Short Bracket",
@@ -270,12 +282,13 @@ PHRASES = {
     "光电开关": "Photoelectric Sensor",
     "井道线缆": "Hoistway Cables",
     "技术文件": "Technical Documents",
+    "爬梯": "Ladder",
 }
 
 REPLACEMENTS = [
     ("Contral Cabinet", "Control Cabinet"),
-    ("Bare Package", "Bare Packing"),
-    ("Soft Package", "Soft Packing"),
+    ("Bare Packing", "Bare Package"),
+    ("Soft Packing", "Soft Package"),
     ("含编码器", "with encoder"),
     ("配安装标准件", "with standard mounting parts"),
     ("含小支架", "with small bracket"),
@@ -322,6 +335,7 @@ REPLACEMENTS = [
     ("米/根", "m/pc"),
     ("升", " L"),
     ("框架Glass", "Frame Glass"),
+    ("后Side Wall Panel", "Rear Side Wall Panel"),
     ("Side Wall Panel（后侧）", "Rear Side Wall Panel"),
     ("Side Wall Panel(后侧)", "Rear Side Wall Panel"),
     ("色", "Color"),
@@ -574,7 +588,63 @@ def scan_pdf_source_for_residual_chinese(input_path: Path) -> list[ResidualChine
     return findings
 
 
-def write_translation_report(path: Path, findings: list[ResidualChineseFinding]) -> None:
+def parse_item_no(value: Any) -> int | None:
+    text = clean_text(value)
+    if not text:
+        return None
+    match = re.fullmatch(r"\d+(?:\.0)?", text)
+    return int(float(text)) if match else None
+
+
+def scan_source_for_quality_findings(input_path: Path) -> list[QualityFinding]:
+    findings: list[QualityFinding] = []
+    workbook = load_workbook(input_path, data_only=True, read_only=True)
+    sheet = find_packing_sheet(workbook)
+    starts = find_detail_starts(sheet)
+    for index, start in enumerate(starts):
+        next_start = starts[index + 1] if index + 1 < len(starts) else None
+        end = (next_start - 1) if next_start else sheet.max_row
+        expected_no: int | None = None
+        for row in range(start + 5, min(end, start + 36) + 1):
+            no_value = sheet.cell(row, 1).value
+            description = clean_text(sheet.cell(row, 3).value)
+            qty = clean_text(sheet.cell(row, 6).value)
+            unit = clean_text(sheet.cell(row, 7).value)
+            row_text = " ".join(clean_text(sheet.cell(row, column).value) for column in [1, 2, 3, 4, 6, 7, 8])
+            if not row_text:
+                continue
+            if row_text.startswith("装箱员") or description == "备注":
+                continue
+
+            item_no = parse_item_no(no_value)
+            if item_no is not None:
+                if expected_no is not None and item_no != expected_no:
+                    findings.append(
+                        QualityFinding(
+                            location=f"{sheet.title}!A{row}",
+                            text=f"No. jumps from {expected_no - 1} to {item_no}; please check missing or duplicated item numbers.",
+                        )
+                    )
+                expected_no = item_no + 1
+
+            if description and qty and not unit:
+                translated_description = translate(description)
+                findings.append(
+                    QualityFinding(
+                        location=f"{sheet.title}!G{row}",
+                        text=f"Unit is missing for '{translated_description}' with Qty {qty}.",
+                    )
+                )
+    workbook.close()
+    return findings
+
+
+def write_translation_report(
+    path: Path,
+    findings: list[ResidualChineseFinding],
+    quality_findings: list[QualityFinding] | None = None,
+) -> None:
+    quality_findings = quality_findings or []
     lines = [
         "Translation residual Chinese check",
         "==================================",
@@ -593,6 +663,25 @@ def write_translation_report(path: Path, findings: list[ResidualChineseFinding])
         ])
         for index, finding in enumerate(findings, start=1):
             lines.append(f"{index}. [{finding.source}] {finding.location}: {finding.text}")
+    lines.extend([
+        "",
+        "Packing list data quality check",
+        "===============================",
+        "",
+    ])
+    if not quality_findings:
+        lines.extend([
+            "PASS: Item numbers are continuous and required Qty/Unit fields look complete.",
+            "",
+        ])
+    else:
+        lines.extend([
+            f"WARNING: {len(quality_findings)} data quality issue(s) were found.",
+            "Please review the source packing list before printing or shipping.",
+            "",
+        ])
+        for index, finding in enumerate(quality_findings, start=1):
+            lines.append(f"{index}. {finding.location}: {finding.text}")
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
@@ -765,7 +854,8 @@ def convert_workbook(input_path: Path, output_dir: Path) -> ConversionResult:
         findings = scan_excel_for_residual_chinese(excel_path)
         findings.extend(scan_pdf_source_for_residual_chinese(input_path))
         findings.extend(scan_pdf_for_residual_chinese(pdf_path))
-        write_translation_report(report_path, findings)
+        quality_findings = scan_source_for_quality_findings(input_path)
+        write_translation_report(report_path, findings, quality_findings)
     except Exception as exc:
         if isinstance(exc, ConversionError):
             raise
