@@ -14,6 +14,9 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import Image, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 
@@ -32,6 +35,10 @@ class ConversionResult:
 
 
 CHINESE_RE = re.compile(r"[\u4e00-\u9fff]+")
+BASE_DIR = Path(__file__).resolve().parent
+PDF_FONT_REGULAR = "Helvetica"
+PDF_FONT_BOLD = "Helvetica-Bold"
+PDF_FONTS_READY = False
 
 
 @dataclass
@@ -139,8 +146,9 @@ PHRASES = {
     "对重架组件": "Counterweight Frame Assembly",
     "对重导向轮": "Counterweight Deflector Sheave",
     "对重导靴": "Counterweight Guide Shoe",
-    "钢带轮": "Steel Belt Sheave",
+    "钢带轮": "Belt Sheave",
     "对称件": "Symmetrical Part",
+    "轿厢上梁": "Car Top Beam",
     "轿架上梁": "Car Sling Upper Beam",
     "轿厢反绳轮梁": "Car Diverting Sheave Beam",
     "轿厢返绳轮": "Car Diverting Sheave",
@@ -156,7 +164,7 @@ PHRASES = {
     "主机支撑梁": "Machine Support Beam",
     "轿厢支撑梁": "Car Support Beam",
     "对重支撑梁": "Counterweight Support Beam",
-    "轿架下梁": "Car Sling Lower Beam",
+    "轿架下梁": "Car Bottom Beam",
     "轿厢导轨长支架": "Car Guide Rail Long Bracket",
     "轿厢导轨短支架": "Car Guide Rail Short Bracket",
     "对重导轨长支架": "Counterweight Guide Rail Long Bracket",
@@ -206,6 +214,7 @@ PHRASES = {
     "随机资料": "Technical Documents",
     "控制柜": "Control Cabinet",
     "轿顶检修箱": "Car Top Inspection Box",
+    "残疾人操纵箱": "Disabled Control Panel",
     "底坑检修盒(带灯型)": "Pit Inspection Box (with Light)",
     "三方通话": "Three-way Intercom",
     "轿底超载装置": "Car Platform Overload Device",
@@ -232,13 +241,16 @@ REPLACEMENTS = [
     ("连接限位开关", "Connected to Limit Switch "),
     ("连接Limit Switch", "Connected to Limit Switch "),
     ("按楼层站配", "supplied per floor/stop"),
-    ("焊接件", "Weldment "),
+    ("焊接件", "Welded Part"),
     ("绳头棒端头", "Rod End"),
     ("Rope Rod端头", "Rod End"),
     ("有簧", "with spring"),
     ("夹30绳,3槽", "for 30 rope, 3 grooves"),
+    ("夹30绳，4槽", "Clamp for 30 mm Rope, 4 Grooves"),
+    ("夹30绳,4槽", "Clamp for 30 mm Rope, 4 Grooves"),
     ("柴机油", "diesel engine oil"),
-    ("颜色：", "color: "),
+    ("颜色：", "Color: "),
+    ("颜色:", "Color: "),
     ("黑砂", "Black Sand Finish"),
     ("含底座", "with base"),
     ("带紧固件", "With Fasteners"),
@@ -248,8 +260,8 @@ REPLACEMENTS = [
     ("含灯具", "with light fixtures"),
     ("与直梁装配好", "Pre-assembled with the Upright Beam"),
     ("与Upright Beam装配好", "Pre-assembled with the Upright Beam"),
-    ("含弹簧及紧固件", "Including Spring(s) and Fasteners"),
-    ("含弹簧及Fasteners", "Including Spring(s) and Fasteners"),
+    ("含弹簧及紧固件", "Including Springs and Fasteners"),
+    ("含弹簧及Fasteners", "Including Springs and Fasteners"),
     ("含防尘罩，油杯座", "with dust cover and oil cup seat"),
     ("与对重架组装发货", "Shipped Pre-assembled with counterweight frame"),
     ("与Counterweight FrameShipped Pre-assembled", "Pre-assembled with the Counterweight Frame"),
@@ -260,6 +272,9 @@ REPLACEMENTS = [
     ("米/根", "m/pc"),
     ("升", " L"),
     ("框架Glass", "Frame Glass"),
+    ("Side Wall Panel（后侧）", "Rear Side Wall Panel"),
+    ("Side Wall Panel(后侧)", "Rear Side Wall Panel"),
+    ("色", "Color"),
 ]
 
 UNITS = {
@@ -356,14 +371,60 @@ def paragraph(value: Any, style: ParagraphStyle) -> Paragraph:
     return Paragraph(escaped.replace("\n", "<br/>"), style)
 
 
+def register_pdf_fonts() -> tuple[str, str]:
+    global PDF_FONTS_READY, PDF_FONT_REGULAR, PDF_FONT_BOLD
+    if PDF_FONTS_READY:
+        return PDF_FONT_REGULAR, PDF_FONT_BOLD
+
+    bundled_regular = BASE_DIR / "assets" / "fonts" / "NotoSansSC-Regular.ttf"
+    bundled_bold = BASE_DIR / "assets" / "fonts" / "NotoSansSC-Bold.ttf"
+    local_cjk_candidates = [
+        Path("/System/Library/Fonts/STHeiti Light.ttc"),
+        Path("/System/Library/Fonts/Hiragino Sans GB.ttc"),
+    ]
+
+    try:
+        if bundled_regular.exists() and bundled_regular.stat().st_size > 1024 * 1024:
+            pdfmetrics.registerFont(TTFont("NotoSansSC", str(bundled_regular)))
+            PDF_FONT_REGULAR = "NotoSansSC"
+            if bundled_bold.exists() and bundled_bold.stat().st_size > 1024 * 1024:
+                pdfmetrics.registerFont(TTFont("NotoSansSC-Bold", str(bundled_bold)))
+                PDF_FONT_BOLD = "NotoSansSC-Bold"
+            else:
+                PDF_FONT_BOLD = PDF_FONT_REGULAR
+        else:
+            for font_path in local_cjk_candidates:
+                if not font_path.exists():
+                    continue
+                try:
+                    pdfmetrics.registerFont(TTFont("LocalCJK", str(font_path), subfontIndex=0))
+                    PDF_FONT_REGULAR = "LocalCJK"
+                    PDF_FONT_BOLD = "LocalCJK"
+                    break
+                except Exception:
+                    continue
+            else:
+                pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
+                PDF_FONT_REGULAR = "STSong-Light"
+                PDF_FONT_BOLD = "STSong-Light"
+    except Exception:
+        pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
+        PDF_FONT_REGULAR = "STSong-Light"
+        PDF_FONT_BOLD = "STSong-Light"
+
+    PDF_FONTS_READY = True
+    return PDF_FONT_REGULAR, PDF_FONT_BOLD
+
+
 def make_styles():
+    regular_font, bold_font = register_pdf_fonts()
     sample = getSampleStyleSheet()
     return {
-        "title": ParagraphStyle("title", parent=sample["Title"], fontSize=18, leading=22, alignment=TA_CENTER),
-        "small": ParagraphStyle("small", parent=sample["Normal"], fontSize=8.5, leading=10, alignment=TA_LEFT),
-        "cell": ParagraphStyle("cell", parent=sample["Normal"], fontSize=7.3, leading=8.8, alignment=TA_LEFT),
-        "center": ParagraphStyle("center", parent=sample["Normal"], fontSize=7.3, leading=8.8, alignment=TA_CENTER),
-        "head": ParagraphStyle("head", parent=sample["Normal"], fontSize=7.2, leading=8.5, alignment=TA_CENTER),
+        "title": ParagraphStyle("title", parent=sample["Title"], fontName=bold_font, fontSize=18, leading=22, alignment=TA_CENTER),
+        "small": ParagraphStyle("small", parent=sample["Normal"], fontName=regular_font, fontSize=8.5, leading=10, alignment=TA_LEFT),
+        "cell": ParagraphStyle("cell", parent=sample["Normal"], fontName=regular_font, fontSize=7.3, leading=8.8, alignment=TA_LEFT),
+        "center": ParagraphStyle("center", parent=sample["Normal"], fontName=regular_font, fontSize=7.3, leading=8.8, alignment=TA_CENTER),
+        "head": ParagraphStyle("head", parent=sample["Normal"], fontName=bold_font, fontSize=7.2, leading=8.5, alignment=TA_CENTER),
     }
 
 
