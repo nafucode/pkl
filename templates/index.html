@@ -13,26 +13,35 @@
           <div class="mark">PKL</div>
           <div>
             <h1>装箱单英文转换</h1>
-            <p>上传电梯装箱单 Excel，生成英文 Excel 和可打印 PDF。</p>
+            <p>上传电梯装箱单 Excel，先预览英文 PDF，确认后再下载。</p>
           </div>
         </div>
 
         <div id="alert" class="alert" hidden></div>
 
-        <form id="upload-form" class="upload" action="{{ url_for('convert') }}" method="post" enctype="multipart/form-data">
+        <form id="upload-form" class="upload" action="{{ url_for('preview') }}" method="post" enctype="multipart/form-data">
           <label class="drop">
             <input id="packing_list" type="file" name="packing_list" accept=".xlsx" required>
             <span class="icon">↑</span>
             <span class="title">选择 .xlsx 装箱单</span>
             <span id="file-name" class="hint">支持类似 XFJ2026-1013 的装箱单格式</span>
           </label>
-          <button id="submit-button" type="submit">生成 Excel + PDF</button>
+          <button id="submit-button" type="submit">生成预览</button>
         </form>
 
         <div id="result" class="result" hidden>
-          <strong>转换完成</strong>
-          <span id="result-meta"></span>
-          <a id="download-link" class="download primary" href="#">重新下载生成包</a>
+          <div class="result-head">
+            <div>
+              <strong>预览已生成</strong>
+              <span id="result-meta"></span>
+            </div>
+            <a id="download-link" class="download primary" href="#">下载 Excel + PDF</a>
+          </div>
+          <iframe id="pdf-preview" class="preview" title="PDF 预览"></iframe>
+          <details class="report">
+            <summary>查看检查报告</summary>
+            <pre id="report-text"></pre>
+          </details>
         </div>
 
         <div class="notes">
@@ -40,7 +49,7 @@
           <span>按箱号分页</span>
           <span>电梯行业术语翻译</span>
           <span>自动检查中文残留</span>
-          <span>生成 zip 下载包</span>
+          <span>预览确认后下载</span>
         </div>
       </section>
     </main>
@@ -53,6 +62,8 @@
       const resultBox = document.querySelector("#result");
       const resultMeta = document.querySelector("#result-meta");
       const downloadLink = document.querySelector("#download-link");
+      const pdfPreview = document.querySelector("#pdf-preview");
+      const reportText = document.querySelector("#report-text");
 
       input.addEventListener("change", () => {
         nameLabel.textContent = input.files[0]?.name || "支持类似 XFJ2026-1013 的装箱单格式";
@@ -70,7 +81,7 @@
         }
 
         button.disabled = true;
-        button.textContent = "正在转换...";
+        button.textContent = "正在生成预览...";
 
         try {
           const body = new FormData(form);
@@ -80,36 +91,27 @@
             throw new Error(data.error || "转换失败，请检查文件格式。");
           }
 
-          const blob = await response.blob();
-          const url = URL.createObjectURL(blob);
-          const disposition = response.headers.get("Content-Disposition") || "";
-          const match = disposition.match(/filename="?([^"]+)"?/);
-          const filename = match?.[1] || "packing-list-English.zip";
+          const data = await response.json();
 
-          downloadLink.href = url;
-          downloadLink.download = filename;
+          downloadLink.href = data.zipDataUrl;
+          downloadLink.download = data.filename || "packing-list-English.zip";
+          pdfPreview.src = data.pdfDataUrl;
+          reportText.textContent = data.reportText || "";
 
-          const packageCount = response.headers.get("X-Package-Count");
-          const pageCount = response.headers.get("X-Page-Count");
-          const residualCount = Number(response.headers.get("X-Residual-Chinese-Count") || "0");
+          const packageCount = data.packageCount;
+          const pageCount = data.pageCount;
+          const residualCount = Number(data.residualChineseCount || "0");
           const checkText = residualCount > 0
             ? `发现 ${residualCount} 处中文残留，请查看下载包内的检查报告。`
             : "中文残留检查通过。";
           resultMeta.textContent = `已生成 ${packageCount || "-"} 个箱号明细，PDF 共 ${pageCount || "-"} 页。${checkText}`;
           resultBox.hidden = false;
-
-          const clicker = document.createElement("a");
-          clicker.href = url;
-          clicker.download = filename;
-          document.body.appendChild(clicker);
-          clicker.click();
-          clicker.remove();
         } catch (error) {
           alertBox.textContent = error.message;
           alertBox.hidden = false;
         } finally {
           button.disabled = false;
-          button.textContent = "生成 Excel + PDF";
+          button.textContent = "生成预览";
         }
       });
     </script>

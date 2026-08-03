@@ -22,7 +22,7 @@ body {
 }
 
 .panel {
-  width: min(720px, 100%);
+  width: min(960px, 100%);
   background: #ffffff;
   border: 1px solid #d8dee6;
   border-radius: 8px;
@@ -146,6 +146,60 @@ button:hover,
   background: #b91f33;
 }
 
+.result {
+  margin-top: 22px;
+}
+
+.result-head {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.result-head strong,
+.result-head span {
+  display: block;
+}
+
+.result-head span {
+  margin-top: 6px;
+  color: #596674;
+  line-height: 1.5;
+}
+
+.preview {
+  width: 100%;
+  height: min(72vh, 760px);
+  border: 1px solid #d8dee6;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.report {
+  margin-top: 14px;
+  border: 1px solid #d8dee6;
+  border-radius: 6px;
+  background: #fbfcfd;
+}
+
+.report summary {
+  padding: 12px 14px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.report pre {
+  margin: 0;
+  padding: 0 14px 14px;
+  white-space: pre-wrap;
+  color: #334155;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .back {
   display: inline-block;
   margin-top: 22px;
@@ -184,12 +238,22 @@ button:hover,
   }
 
   .brand,
+  .result-head,
   .downloads {
     grid-template-columns: 1fr;
   }
 
-  .brand {
+  .brand,
+  .result-head {
     align-items: flex-start;
+  }
+
+  .result-head {
+    display: grid;
+  }
+
+  .preview {
+    height: 62vh;
   }
 
   h1 {
