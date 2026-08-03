@@ -159,6 +159,7 @@ PHRASES = {
     "瞬时式安全钳": "Instantaneous Safety Gear",
     "瞬时安全钳": "Instantaneous Safety Gear",
     "安全钳": "Safety Gear",
+    "含提拉机构、导靴板": "with lifting mechanism and guide shoe plate",
     "安全钳拉杆": "Safety Gear Pull Rod",
     "提拉机构": "Safety Gear Longitudinal Pull Rod",
     "安全钳纵向拉杆": "Safety Gear Longitudinal Pull Rod",
@@ -378,7 +379,7 @@ def translate(value: Any) -> str:
     result = re.sub(r"V\s*=\s*(\d+(?:\.\d+)?)\s*m/s", r"V = \1 m/s", result, flags=re.IGNORECASE)
     result = re.sub(r"Guide Rail Head Width\s*=\s*(\d+(?:\.\d+)?)", r"Guide Rail Head Width = \1 mm", result)
     result = result.replace("层", "F").replace("站", "S").replace("门", "D")
-    result = result.replace("，", ", ").replace("：", ": ").replace("φ", "dia. ")
+    result = result.replace("，", ", ").replace("、", ", ").replace("：", ": ").replace("φ", "dia. ")
     return re.sub(r"\s+", " ", result).strip()
 
 

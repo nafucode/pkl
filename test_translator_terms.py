@@ -33,6 +33,7 @@ def test_standardized_elevator_terms():
         "层站召唤盒": "Landing Call Panel",
         "轿厢架上梁": "Car Sling Upper Beam",
         "轿厢架下梁": "Car Sling Lower Beam",
+        "含提拉机构、导靴板": "with lifting mechanism and guide shoe plate",
         "绳头组合": "Wedge Rope Socket Assembly",
         "钢丝绳夹": "Wire Rope Clip",
         "导轨支架底座": "Guide Rail Bracket Base",
