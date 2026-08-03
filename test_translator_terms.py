@@ -63,6 +63,10 @@ def test_color_phrase_is_not_partially_translated():
     assert translate("颜色：RAL 7035") == "Color: RAL 7035"
 
 
+def test_unit_terms():
+    assert translate("根") == "pcs"
+
+
 def test_standardized_english_replacements():
     assert translate("Bare Packing") == "Bare Package"
     assert translate("Soft Packing") == "Soft Package"
