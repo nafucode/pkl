@@ -731,8 +731,6 @@ def item_rows(sheet, start: int, next_start: int | None, styles: dict[str, Parag
             paragraph(values[5], styles["center"]),
             paragraph(values[6], styles["cell"]),
         ])
-    while len(rows) < 17:
-        rows.append([paragraph("", styles["cell"]) for _ in range(7)])
     return rows
 
 
@@ -830,13 +828,6 @@ def build_pdf(input_path: Path, output_path: Path) -> int:
             meta_table,
             Spacer(1, 3 * mm),
             item_table,
-            Spacer(1, 5 * mm),
-            Paragraph(
-                "Packer/Date:______________   Packing Supervisor/Date:______________   Packing Inspector/Date:______________",
-                styles["small"],
-            ),
-            Spacer(1, 5 * mm),
-            Paragraph("Remarks:", styles["small"]),
         ])
 
     doc.build(story)
