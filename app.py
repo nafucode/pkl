@@ -45,6 +45,18 @@ def make_archive(result, code: str) -> io.BytesIO:
     return archive
 
 
+def data_url(mimetype: str, content: bytes) -> str:
+    return f"data:{mimetype};base64," + base64.b64encode(content).decode("ascii")
+
+
+def report_summary(report_text: str, residual_chinese_count: int) -> dict[str, int]:
+    quality_match = re.search(r"WARNING:\s*(\d+)\s+data quality issue", report_text)
+    return {
+        "residualChinese": residual_chinese_count,
+        "qualityIssues": int(quality_match.group(1)) if quality_match else 0,
+    }
+
+
 @app.get("/")
 def index():
     return render_template("index.html")
@@ -110,17 +122,25 @@ def preview():
 
         archive = make_archive(result, code)
         pdf_bytes = result.pdf_path.read_bytes()
+        excel_bytes = result.excel_path.read_bytes()
         report_text = result.report_path.read_text(encoding="utf-8")
 
         return jsonify(
             {
                 "filename": f"{code}-English.zip",
+                "pdfFilename": f"{code}-English.pdf",
+                "excelFilename": f"{code}-English.xlsx",
                 "packageCount": result.package_count,
                 "pageCount": result.page_count,
                 "residualChineseCount": result.residual_chinese_count,
+                "summary": report_summary(report_text, result.residual_chinese_count),
                 "reportText": report_text,
-                "pdfDataUrl": "data:application/pdf;base64," + base64.b64encode(pdf_bytes).decode("ascii"),
-                "zipDataUrl": "data:application/zip;base64," + base64.b64encode(archive.getvalue()).decode("ascii"),
+                "pdfDataUrl": data_url("application/pdf", pdf_bytes),
+                "excelDataUrl": data_url(
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    excel_bytes,
+                ),
+                "zipDataUrl": data_url("application/zip", archive.getvalue()),
             }
         )
 

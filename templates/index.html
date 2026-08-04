@@ -8,48 +8,82 @@
   </head>
   <body>
     <main class="shell">
-      <section class="panel">
-        <div class="brand">
+      <section class="workspace">
+        <header class="brand">
           <div class="mark">PKL</div>
           <div>
             <h1>装箱单英文转换</h1>
             <p>上传电梯装箱单 Excel，先预览英文 PDF，确认后再下载。</p>
           </div>
-        </div>
+        </header>
 
         <div id="alert" class="alert" hidden></div>
 
-        <form id="upload-form" class="upload" action="{{ url_for('preview') }}" method="post" enctype="multipart/form-data">
-          <label class="drop">
-            <input id="packing_list" type="file" name="packing_list" accept=".xlsx" required>
-            <span class="icon">↑</span>
-            <span class="title">选择 .xlsx 装箱单</span>
-            <span id="file-name" class="hint">支持类似 XFJ2026-1013 的装箱单格式</span>
-          </label>
-          <button id="submit-button" type="submit">生成预览</button>
-        </form>
+        <div class="layout">
+          <aside class="controls">
+            <form id="upload-form" class="upload" action="{{ url_for('preview') }}" method="post" enctype="multipart/form-data">
+              <label class="drop">
+                <input id="packing_list" type="file" name="packing_list" accept=".xlsx" required>
+                <span class="icon">↑</span>
+                <span class="title">选择 .xlsx 装箱单</span>
+                <span id="file-name" class="hint">支持类似 XFJ2026-1013 的装箱单格式</span>
+              </label>
+              <button id="submit-button" type="submit">生成预览</button>
+            </form>
 
-        <div id="result" class="result" hidden>
-          <div class="result-head">
-            <div>
-              <strong>预览已生成</strong>
-              <span id="result-meta"></span>
+            <div id="result" class="result" hidden>
+              <div class="result-head">
+                <strong>预览已生成</strong>
+                <span id="result-meta"></span>
+              </div>
+
+              <div class="checks" aria-label="检查摘要">
+                <div class="check-card">
+                  <span class="check-label">箱号</span>
+                  <strong id="package-count">-</strong>
+                </div>
+                <div class="check-card">
+                  <span class="check-label">PDF 页数</span>
+                  <strong id="page-count">-</strong>
+                </div>
+                <div id="residual-card" class="check-card">
+                  <span class="check-label">中文残留</span>
+                  <strong id="residual-count">-</strong>
+                </div>
+                <div id="quality-card" class="check-card">
+                  <span class="check-label">数据提醒</span>
+                  <strong id="quality-count">-</strong>
+                </div>
+              </div>
+
+              <div class="download-group">
+                <a id="pdf-download-link" class="download primary" href="#">下载 PDF</a>
+                <a id="excel-download-link" class="download" href="#">下载 Excel</a>
+                <a id="zip-download-link" class="download secondary" href="#">下载 ZIP</a>
+              </div>
+
+              <details class="report">
+                <summary>查看检查报告</summary>
+                <pre id="report-text"></pre>
+              </details>
             </div>
-            <a id="download-link" class="download primary" href="#">下载 Excel + PDF</a>
-          </div>
-          <iframe id="pdf-preview" class="preview" title="PDF 预览"></iframe>
-          <details class="report">
-            <summary>查看检查报告</summary>
-            <pre id="report-text"></pre>
-          </details>
-        </div>
 
-        <div class="notes">
-          <span>保留 Excel 内嵌 Logo</span>
-          <span>按箱号分页</span>
-          <span>电梯行业术语翻译</span>
-          <span>自动检查中文残留</span>
-          <span>预览确认后下载</span>
+            <div class="notes">
+              <span>保留 Excel 内嵌 Logo</span>
+              <span>按箱号分页</span>
+              <span>电梯行业术语翻译</span>
+              <span>自动检查中文残留</span>
+              <span>预览确认后下载</span>
+            </div>
+          </aside>
+
+          <section class="preview-pane">
+            <div id="empty-preview" class="empty-preview">
+              <strong>PDF 预览区</strong>
+              <span>上传装箱单并生成预览后，PDF 会显示在这里。</span>
+            </div>
+            <iframe id="pdf-preview" class="preview" title="PDF 预览" hidden></iframe>
+          </section>
         </div>
       </section>
     </main>
@@ -61,9 +95,18 @@
       const alertBox = document.querySelector("#alert");
       const resultBox = document.querySelector("#result");
       const resultMeta = document.querySelector("#result-meta");
-      const downloadLink = document.querySelector("#download-link");
+      const pdfDownloadLink = document.querySelector("#pdf-download-link");
+      const excelDownloadLink = document.querySelector("#excel-download-link");
+      const zipDownloadLink = document.querySelector("#zip-download-link");
       const pdfPreview = document.querySelector("#pdf-preview");
       const reportText = document.querySelector("#report-text");
+      const emptyPreview = document.querySelector("#empty-preview");
+      const packageCountLabel = document.querySelector("#package-count");
+      const pageCountLabel = document.querySelector("#page-count");
+      const residualCountLabel = document.querySelector("#residual-count");
+      const qualityCountLabel = document.querySelector("#quality-count");
+      const residualCard = document.querySelector("#residual-card");
+      const qualityCard = document.querySelector("#quality-card");
 
       input.addEventListener("change", () => {
         nameLabel.textContent = input.files[0]?.name || "支持类似 XFJ2026-1013 的装箱单格式";
@@ -73,6 +116,8 @@
         event.preventDefault();
         alertBox.hidden = true;
         resultBox.hidden = true;
+        pdfPreview.hidden = true;
+        emptyPreview.hidden = false;
 
         if (!input.files.length) {
           alertBox.textContent = "请选择一个 Excel 装箱单文件。";
@@ -93,19 +138,34 @@
 
           const data = await response.json();
 
-          downloadLink.href = data.zipDataUrl;
-          downloadLink.download = data.filename || "packing-list-English.zip";
+          pdfDownloadLink.href = data.pdfDataUrl;
+          pdfDownloadLink.download = data.pdfFilename || "packing-list-English.pdf";
+          excelDownloadLink.href = data.excelDataUrl;
+          excelDownloadLink.download = data.excelFilename || "packing-list-English.xlsx";
+          zipDownloadLink.href = data.zipDataUrl;
+          zipDownloadLink.download = data.filename || "packing-list-English.zip";
           pdfPreview.src = data.pdfDataUrl;
           reportText.textContent = data.reportText || "";
 
           const packageCount = data.packageCount;
           const pageCount = data.pageCount;
           const residualCount = Number(data.residualChineseCount || "0");
+          const qualityCount = Number(data.summary?.qualityIssues || "0");
           const checkText = residualCount > 0
             ? `发现 ${residualCount} 处中文残留，请查看下载包内的检查报告。`
             : "中文残留检查通过。";
           resultMeta.textContent = `已生成 ${packageCount || "-"} 个箱号明细，PDF 共 ${pageCount || "-"} 页。${checkText}`;
+          packageCountLabel.textContent = packageCount || "-";
+          pageCountLabel.textContent = pageCount || "-";
+          residualCountLabel.textContent = residualCount;
+          qualityCountLabel.textContent = qualityCount;
+          residualCard.classList.toggle("warning", residualCount > 0);
+          residualCard.classList.toggle("ok", residualCount === 0);
+          qualityCard.classList.toggle("warning", qualityCount > 0);
+          qualityCard.classList.toggle("ok", qualityCount === 0);
           resultBox.hidden = false;
+          emptyPreview.hidden = true;
+          pdfPreview.hidden = false;
         } catch (error) {
           alertBox.textContent = error.message;
           alertBox.hidden = false;
